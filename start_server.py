@@ -6,7 +6,6 @@ import os
 # ================= 配置区 =================
 SERVER_URL = "https://panel.vektalnodes.in/server/6029f749"
 
-# 从 GitHub Secrets 读取隐私信息
 PANEL_USER = os.environ.get('PANEL_USER')
 PANEL_PASS = os.environ.get('PANEL_PASS')
 RAW_COOKIE = os.environ.get('PANEL_COOKIE', '')
@@ -44,7 +43,6 @@ def send_telegram(title, summary):
         pass
 
 def parse_cookies(cookie_string):
-    """将文本 Cookie 解析为 Playwright 格式"""
     cookies = []
     if not cookie_string: return cookies
     for item in cookie_string.split(';'):
@@ -69,7 +67,6 @@ def run_server_starter():
             viewport={"width": 1280, "height": 800}
         )
 
-        # 1. 注入你的 Laravel 专属 Cookies
         parsed_cookies = parse_cookies(RAW_COOKIE)
         if parsed_cookies:
             context.add_cookies(parsed_cookies)
@@ -81,11 +78,12 @@ def run_server_starter():
         try:
             page.goto(SERVER_URL, timeout=30000)
             page.wait_for_load_state("networkidle")
+            time.sleep(3) # 给 UI 一点加载时间
             
-            # 2. 检查是否依然被拦截在登录页（Cookie 是否过期）
-            if page.locator("input[type='text']").is_visible() or page.locator("input[name='user']").is_visible():
-                log("⚠️ Cookie 失效或不完整，启动账号密码备用登录方案...")
-                page.locator("input[type='text'], input[name='user']").first.fill(PANEL_USER)
+            # 2. 精准判断：只有存在密码框，才是真正的登录页
+            if page.locator("input[type='password']").is_visible():
+                log("⚠️ 发现密码框，Cookie 失效，启动账号密码备用登录方案...")
+                page.locator("input[type='text'], input[name='user'], input[id='user']").first.fill(PANEL_USER)
                 page.locator("input[type='password']").fill(PANEL_PASS)
                 page.locator("button[type='submit']").click()
                 
@@ -93,7 +91,7 @@ def run_server_starter():
                 page.wait_for_load_state("networkidle")
                 log("✅ 账号密码登录成功！")
             else:
-                log("✅ Cookie 免密直登成功！")
+                log("✅ 免密直登成功，已在控制台页面！")
             
             time.sleep(3) 
             
@@ -104,30 +102,33 @@ def run_server_starter():
                 log("▶️ 发现 Start 按钮，正在点击启动...")
                 start_btn.click()
                 
-                # 4. 等待上方状态变化和倒计时出现
-                log("⏳ 已点击启动，等待 8 秒捕获启动状态和倒计时...")
-                time.sleep(8) 
+                # 4. 重点：等待倒计时出现并读取它
+                log("⏳ 已点击启动，等待面板响应倒计时...")
+                time.sleep(5) # Vektal 响应需要几秒钟
                 
-                save_screenshot(page, "server_started_success")
-                
-                status_text = "已发送启动指令"
+                countdown_text = "未知"
                 try:
-                    uptime_element = page.locator("text=/Uptime|Offline|Starting|Running/i").first
-                    status_text = f"面板反馈: {uptime_element.inner_text()}"
-                except:
-                    pass
+                    # 抓取包含 "Auto Stop:" 的文本
+                    auto_stop_element = page.locator("text=/Auto Stop:/i").first
+                    countdown_text = auto_stop_element.inner_text(timeout=5000)
+                    log(f"⏰ 成功捕获倒计时状态: {countdown_text}")
+                except Exception:
+                    log("⚠️ 未能抓取到倒计时文本，可能面板响应较慢。")
+                
+                # 截图留证
+                save_screenshot(page, "server_started_countdown")
                     
                 log("🎉 renqi 服务器唤醒完毕！")
-                send_telegram("🟢 renqi 服务器已唤醒", f"<b>执行结果：</b>启动指令已成功发送\n<b>{status_text}</b>")
+                send_telegram("🟢 renqi 服务器已唤醒", f"<b>指令状态：</b>成功点击 Start\n<b>面板状态：</b>{countdown_text}")
             else:
                 log("⚠️ 未找到 Start 按钮，服务器可能正在运行中。")
                 save_screenshot(page, "server_already_running")
-                send_telegram("🔵 renqi 服务器状态", "<b>执行结果：</b>未发现启动按钮，服务器处于运行/启动状态。")
+                send_telegram("🔵 renqi 服务器状态", "<b>执行结果：</b>未发现启动按钮，服务器可能正在运行。")
 
         except Exception as e:
             log(f"❌ 运行过程中发生异常: {e}")
             save_screenshot(page, "server_start_error")
-            send_telegram("🚨 renqi 服务器唤醒异常", f"<b>错误原因：</b>{e}")
+            send_telegram("🚨 renqi 唤醒异常", f"<b>错误原因：</b>{e}")
 
         finally:
             browser.close()
