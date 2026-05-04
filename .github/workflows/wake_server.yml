@@ -1,0 +1,44 @@
+name: Wake Up Renqi Server (Every 3 Hours)
+
+on:
+  schedule:
+    # 每天 0, 3, 6, 9, 12, 15, 18, 21 点执行 (UTC时间)
+    - cron: '0 */3 * * *'
+  workflow_dispatch: # 保留手动执行按钮
+
+jobs:
+  run-wake-script:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出当前仓库代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Python 运行环境
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: 安装依赖与浏览器内核
+        run: |
+          python -m pip install --upgrade pip
+          pip install playwright requests
+          playwright install chromium
+          playwright install-deps
+
+      - name: 运行虚拟桌面并执行唤醒脚本
+        env:
+          TG_TOKEN: ${{ secrets.TG_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          PANEL_USER: ${{ secrets.PANEL_USER }}
+          PANEL_PASS: ${{ secrets.PANEL_PASS }}
+          PANEL_COOKIE: ${{ secrets.PANEL_COOKIE }}
+        run: |
+          xvfb-run --auto-servernum --server-args="-screen 0 1280x800x24" python start_server.py
+
+      - name: 打包现场截图
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: panel-screenshots
+          path: screenshots/*.png
+          if-no-files-found: ignore
