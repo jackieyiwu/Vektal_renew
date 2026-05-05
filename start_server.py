@@ -4,7 +4,7 @@ import time
 import os
 
 # ================= 配置区 =================
-SERVER_URL = "https://panel.vektalnodes.in/server/6029f749"
+SERVER_URL = "https://panel.vektalnodes.in/server/602306ee-8b39-4c02-a5fc-ee984940c43b"
 
 PANEL_USER = os.environ.get('PANEL_USER')
 PANEL_PASS = os.environ.get('PANEL_PASS')
