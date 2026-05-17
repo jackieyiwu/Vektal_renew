@@ -60,6 +60,7 @@ def run_server_starter():
     with sync_playwright() as p:
         browser = p.chromium.launch(
             headless=False, 
+            proxy={"server": "http://127.0.0.1:10808"},
             args=['--disable-blink-features=AutomationControlled', '--no-sandbox']
         )
         context = browser.new_context(
