@@ -1,44 +1,111 @@
-name: Wake Up Renqi Server (Every 3 Hours)
+name: Vektal UI Auto Earn (Stealth + Proxy Mode)
 
 on:
   schedule:
-    # 每天 0, 3, 6, 9, 12, 15, 18, 21 点执行 (UTC时间)
     - cron: '0 */3 * * *'
-  workflow_dispatch: # 保留手动执行按钮
+  workflow_dispatch:
 
 jobs:
-  run-wake-script:
+  run-secret-script:
     runs-on: ubuntu-latest
     steps:
       - name: 检出当前仓库代码
         uses: actions/checkout@v4
 
-      - name: 设置 Python 运行环境
+      - name: 设置 Python 环境
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: 安装依赖与浏览器内核
+      - name: 安装 Playwright 及相关依赖
         run: |
           python -m pip install --upgrade pip
           pip install playwright requests
           playwright install chromium
           playwright install-deps
 
-      - name: 运行虚拟桌面并执行唤醒脚本
+      # ==========================================
+      # 👇 这是新增的核心魔法：在云端服务器启动 VLESS 节点
+      # ==========================================
+      - name: 启动 Xray 代理内核
+        run: |
+          echo "下载 Xray-core..."
+          wget -qO xray.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
+          unzip -q xray.zip -d xray-core
+          
+          echo "写入节点配置文件..."
+          cat << 'EOF' > config.json
+          {
+            "log": {"loglevel": "warning"},
+            "inbounds": [
+              {
+                "tag": "socks",
+                "port": 10808,
+                "listen": "127.0.0.1",
+                "protocol": "mixed",
+                "sniffing": {"enabled": true, "destOverride": ["http", "tls", "quic", "fakedns"]}
+              }
+            ],
+            "outbounds": [
+              {
+                "tag": "proxy",
+                "protocol": "vless",
+                "settings": {
+                  "vnext": [{
+                    "address": "nni.gfw2500.com",
+                    "port": 57345,
+                    "users": [{"id": "551d248a-ea9d-4cc3-a896-4576761d9419", "encryption": "none", "flow": "xtls-rprx-vision"}]
+                  }]
+                },
+                "streamSettings": {
+                  "network": "tcp",
+                  "security": "reality",
+                  "realitySettings": {
+                    "serverName": "www.amazon.com",
+                    "fingerprint": "chrome",
+                    "publicKey": "rYH4wPTVzSwtpXgI3U7YxppIP6oudD-425vT7pyhj1w"
+                  }
+                }
+              },
+              {"tag": "direct", "protocol": "freedom"},
+              {"tag": "block", "protocol": "blackhole"}
+            ],
+            "routing": {
+              "domainStrategy": "AsIs",
+              "rules": [
+                {"type": "field", "outboundTag": "direct", "domain": ["geosite:cn"]},
+                {"type": "field", "outboundTag": "direct", "ip": ["geoip:cn", "geoip:private"]}
+              ]
+            }
+          }
+          EOF
+          
+          echo "在后台启动 Xray 代理服务..."
+          nohup ./xray-core/xray run -c config.json > xray.log 2>&1 &
+          
+          echo "等待 3 秒确保代理启动..."
+          sleep 3
+          
+          echo "测试代理连通性 (查询当前IP)..."
+          curl -x http://127.0.0.1:10808 -s https://ifconfig.me || echo "代理连接似乎有问题，但继续执行"
+
+      # ==========================================
+      # 👇 代理启动后，再执行我们的 Python 脚本
+      # ==========================================
+      - name: 在黑暗中运行印钞机
         env:
+          MY_COOKIE: ${{ secrets.MY_COOKIE }}
+          VEKTAL_USER: ${{ secrets.PANEL_USER }}
+          VEKTAL_PASS: ${{ secrets.PANEL_PASS }}
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-          PANEL_USER: ${{ secrets.PANEL_USER }}
-          PANEL_PASS: ${{ secrets.PANEL_PASS }}
-          PANEL_COOKIE: ${{ secrets.PANEL_COOKIE }}
         run: |
-          xvfb-run --auto-servernum --server-args="-screen 0 1280x800x24" python start_server.py
+          xvfb-run --auto-servernum --server-args="-screen 0 1280x800x24" python vektal_ui.py
 
-      - name: 打包现场截图
+      - name: 提取监控截图
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: panel-screenshots
+          name: debug-screenshots
           path: screenshots/*.png
           if-no-files-found: ignore
