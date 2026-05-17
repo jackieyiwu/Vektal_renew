@@ -15,7 +15,7 @@ jobs:
       - name: 潜入私有仓库获取代码
         uses: actions/checkout@v4
         with:
-          repository: 'kanezikii/vektal_linkvertise' 
+          repository: 'kanezikii/Vektal_renew' 
           token: ${{ secrets.PRIVATE_REPO_TOKEN }} 
           path: 'secret-script' 
 
