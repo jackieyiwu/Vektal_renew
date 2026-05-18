@@ -131,54 +131,59 @@ def run_server_starter():
                 if adblock_btn.is_visible():
                     log("❌ Recheck 失败！请务必检查并移除 XRAY_JSON 中的广告拦截规则 (block)！")
                     
-            # 寻找并点击 Start 按钮
-            start_btn = page.locator("button:has-text('Start')").first
+            start_btn = page.locator("button[data-action='start'], button[aria-label='Start'], button[title='Start']").first
             
+            # 如果按属性找不到，就通过相对位置盲点：找那一排按钮的第一个(通常是播放键)
+            if not start_btn.is_visible():
+                start_btn = page.locator("div.flex.space-x-2 > button").first
+
             if start_btn.is_visible():
-                log("▶️ 发现 Start 按钮，正在点击启动...")
+                log("▶️ 发现启动按钮 (Play图标)，正在点击...")
                 start_btn.click()
                 
-                # ==========================================
-                # 🟢 终极升级：动态等待 Watch Ad 并兼容多种 HTML 标签
-                # ==========================================
-                log("⏳ 已点击 Start，动态等待页面跳转和广告加载...")
-                
+                log("⏳ 已点击，动态等待页面跳转和广告加载...")
                 try:
-                    # 同时匹配 button 和 a 标签，最多耐心等待 15 秒
+                    # 等待广告页面的 Watch Ad 按钮
                     watch_ad_btn = page.locator("button:has-text('Watch Ad'), a:has-text('Watch Ad')").first
                     watch_ad_btn.wait_for(state="visible", timeout=15000)
                     
                     log("📺 成功捕获广告界面！正在点击 Watch Ad...")
                     watch_ad_btn.click()
                     
-                    log("⏳ 正在挂机播放广告 (可能长达30秒)，等待后台结算...")
-                    # 动态监听是否自动跳回了控制台（出现 Auto Stop）
+                    log("⏳ 正在挂机播放广告 (必须等 AppLixir 视频播完)，等待后台结算...")
+                    # 强行等待，直到页面跳回且状态不再是 Offline
                     page.wait_for_selector("text=/Auto Stop:/i", timeout=60000)
-                    log("✅ 广告结算完毕！已自动重定向回服务器页面。")
-                    time.sleep(3) # 给页面渲染留点缓冲
+                    time.sleep(5) # 多等5秒，让面板与后端通讯完成状态切换
                     
                 except Exception:
-                    log("⏩ 15秒内未检测到广告按钮，可能直接跳过了广告，尝试直接抓取状态...")
-                    # 如果卡死，兜底刷新一下
-                    if page.locator("text=Support VektalNodes").is_visible():
-                        log("⚠️ 页面似乎卡在广告前置页，尝试强刷回退...")
-                        page.goto(SERVER_URL)
-                        page.wait_for_load_state("networkidle")
-                        time.sleep(5)
-                # ==========================================
+                    log("⏩ 未检测到广告按钮或等待超时，尝试兜底刷新检查状态...")
+                    page.goto(SERVER_URL)
+                    page.wait_for_load_state("networkidle")
+                    time.sleep(5)
                 
+                # ---------------- 核心校验逻辑 ----------------
                 countdown_text = "未知"
                 try:
                     auto_stop_element = page.locator("text=/Auto Stop:/i").first
                     countdown_text = auto_stop_element.inner_text(timeout=10000)
-                    log(f"⏰ 成功捕获倒计时状态: {countdown_text}")
+                    log(f"🔎 捕获到最新状态: {countdown_text}")
                 except Exception:
-                    log("⚠️ 未能抓取到倒计时文本，服务器可能响应较慢。")
+                    log("⚠️ 未能抓取到倒计时文本。")
                 
-                save_screenshot(page, "server_started_countdown")
-                    
-                log("🎉 renqi 服务器唤醒完毕！")
-                send_telegram("🟢 renqi 服务器已唤醒", f"<b>指令状态：</b>成功跨越广告启动\n<b>面板状态：</b>{countdown_text}")
+                # 严格判断是否真的唤醒了
+                if "Offline" in countdown_text:
+                    log("❌ 严重警告：服务器依然是 Offline，未能真正唤醒！")
+                    log("💡 原因分析：广告视频被节点拦截，AppLixir 无法发送『播放完毕』的确认信号。")
+                    save_screenshot(page, "server_start_failed_offline")
+                    send_telegram("🚨 renqi 唤醒失败", "<b>状态依然是 Offline。</b>\n请检查家宽节点是否仍在拦截广告流量！")
+                    # 抛出异常，让 GitHub Actions 标记为红叉失败
+                    raise Exception("Server remained offline after start attempt.")
+                else:
+                    log("🎉 renqi 服务器成功开始启动/运行！")
+                    save_screenshot(page, "server_started_success")
+                    send_telegram("🟢 renqi 服务器已唤醒", f"<b>指令状态：</b>验证通过\n<b>面板状态：</b>{countdown_text}")
+            else:
+                log("⚠️ 页面上没找到任何启动按钮，可能是界面加载不完整。")
 
         except Exception as e:
             log(f"❌ 运行过程中发生异常: {e}")
