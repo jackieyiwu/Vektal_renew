@@ -6,6 +6,7 @@ import os
 # ================= 配置区 =================
 SERVER_URL = "https://panel.vektalnodes.in/server/602306ee-8b39-4c02-a5fc-ee984940c43b"
 
+# 从 GitHub Secrets 动态读取所有敏感信息
 PANEL_USER = os.environ.get('PANEL_USER')
 PANEL_PASS = os.environ.get('PANEL_PASS')
 RAW_COOKIE = os.environ.get('PANEL_COOKIE', '')
@@ -60,8 +61,8 @@ def run_server_starter():
     with sync_playwright() as p:
         browser = p.chromium.launch(
             headless=False, 
-            # 💡 修复点 1：统一使用更稳定的 http 代理通道
-            proxy={"server": "http://127.0.0.1:10808"},
+            # 强制浏览器走云端部署的家宽代理
+            proxy={"server": "socks5://127.0.0.1:10808"},
             args=['--disable-blink-features=AutomationControlled', '--no-sandbox']
         )
         context = browser.new_context(
@@ -75,7 +76,7 @@ def run_server_starter():
             log("🍪 成功注入身份 Cookie")
 
         page = context.new_page()
-        # 💡 修复点 2：为家宽代理设置全局默认超时为 60 秒 (60000ms)
+        # 赋予家宽节点充分的加载时间 (60秒)
         page.set_default_timeout(60000)
         
         log("🚀 启动浏览器，通过纯净家宽访问 renqi 面板...")
@@ -85,6 +86,7 @@ def run_server_starter():
             page.wait_for_load_state("networkidle")
             time.sleep(3) 
             
+            # 判断是否在登录页
             if page.locator("input[type='password']").is_visible():
                 log("⚠️ 发现密码框，Cookie 失效，启动账号密码备用登录方案...")
                 page.locator("input[type='text'], input[name='user'], input[id='user']").first.fill(PANEL_USER)
@@ -99,6 +101,7 @@ def run_server_starter():
             
             time.sleep(3) 
             
+            # 寻找并点击 Start 按钮
             start_btn = page.locator("button:has-text('Start')").first
             
             if start_btn.is_visible():
@@ -131,6 +134,7 @@ def run_server_starter():
             send_telegram("🚨 renqi 唤醒异常", f"<b>错误原因：</b>{e}")
 
         finally:
+            time.sleep(2)
             browser.close()
 
 if __name__ == "__main__":
