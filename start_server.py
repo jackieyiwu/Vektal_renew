@@ -124,8 +124,29 @@ def run_server_starter():
                 log("▶️ 发现 Start 按钮，正在点击启动...")
                 start_btn.click()
                 
-                log("⏳ 已点击启动，等待面板响应倒计时...")
+                log("⏳ 已点击启动，检查是否触发广告墙...")
                 time.sleep(5) 
+            
+                # 🟢 新增：拦截并处理 Watch Ad 激励广告
+                watch_ad_btn = page.locator("button:has-text('Watch Ad')").first
+                if watch_ad_btn.is_visible():
+                    log("📺 触发了激励广告拦截，正在点击 Watch Ad...")
+                    watch_ad_btn.click()
+                    
+                    # 视频广告时长不固定（通常10-30秒）。
+                    # 设置最大等待 60 秒，智能监听是否自动跳回了控制台。
+                    log("⏳ 正在挂机播放广告，等待后台结算并自动跳转回控制台...")
+                    try:
+                        # 如果出现 "Auto Stop:"，说明已经成功切回了服务器详情页
+                        page.wait_for_selector("text=/Auto Stop:/i", timeout=60000)
+                        log("✅ 广告结算完毕！已自动重定向回服务器页面。")
+                        time.sleep(2) # 给页面渲染缓冲时间
+                    except Exception:
+                        log("⚠️ 挂机等待超时或未自动跳转，尝试强行刷新页面回退...")
+                        page.goto(SERVER_URL)
+                        page.wait_for_load_state("networkidle")
+                        time.sleep(5)
+                # ==========================================
                 
                 countdown_text = "未知"
                 try:
@@ -138,7 +159,7 @@ def run_server_starter():
                 save_screenshot(page, "server_started_countdown")
                     
                 log("🎉 renqi 服务器唤醒完毕！")
-                send_telegram("🟢 renqi 服务器已唤醒", f"<b>指令状态：</b>成功点击 Start\n<b>面板状态：</b>{countdown_text}")
+                send_telegram("🟢 renqi 服务器已唤醒", f"<b>指令状态：</b>成功跨越广告启动\n<b>面板状态：</b>{countdown_text}")
             else:
                 log("⚠️ 未找到 Start 按钮，服务器可能正在运行中。")
                 save_screenshot(page, "server_already_running")
