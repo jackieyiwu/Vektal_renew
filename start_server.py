@@ -59,21 +59,26 @@ def parse_cookies(cookie_string):
 
 def run_server_starter():
     with sync_playwright() as p:
-       browser = p.chromium.launch(
-    headless=False,
-    args=['--disable-blink-features=AutomationControlled', '--no-sandbox']
+        # 1. 启动浏览器 (移除了代理)
+        browser = p.chromium.launch(
+            headless=False,
+            args=['--disable-blink-features=AutomationControlled', '--no-sandbox']
         )
-            context = browser.new_context(
+
+        # 2. 创建上下文
+        context = browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             viewport={"width": 1280, "height": 800}
         )
 
+        # 3. 注入 Cookie
         parsed_cookies = parse_cookies(RAW_COOKIE)
         if parsed_cookies:
             context.add_cookies(parsed_cookies)
             log("🍪 成功注入身份 Cookie")
 
         page = context.new_page()
+      
         # 赋予家宽节点充分的加载时间 (60秒)
         page.set_default_timeout(60000)
         
