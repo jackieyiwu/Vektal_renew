@@ -61,6 +61,8 @@ def run_server_starter():
     with sync_playwright() as p:
         browser = p.chromium.launch(
             headless=False, 
+            # 强制浏览器走云端部署的家宽代理
+            proxy={"server": "socks5://127.0.0.1:10808"},
             args=['--disable-blink-features=AutomationControlled', '--no-sandbox']
         )
         context = browser.new_context(
