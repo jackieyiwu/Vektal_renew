@@ -24,6 +24,40 @@ jobs:
           playwright install chromium
           playwright install-deps
 
+      # ==========================================
+      # 👇 从 Secrets 读取节点 JSON 并启动代理
+      # ==========================================
+      - name: 启动 Xray 代理内核
+        env:
+          NODE_CONFIG: ${{ secrets.XRAY_JSON }}
+        run: |
+          echo "下载 Xray-core..."
+          wget -qO xray.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
+          unzip -q xray.zip -d xray-core
+          chmod +x xray-core/xray
+          
+          echo "将 Secrets 中的节点配置安全写入文件..."
+          # 使用 Python 写入，完美避免 Bash echo 导致的换行和转义字符丢失问题
+          python -c "import os; open('xray-core/config.json', 'w', encoding='utf-8').write(os.environ.get('NODE_CONFIG', ''))"
+          
+          echo "在后台启动 Xray 代理服务..."
+          cd xray-core
+          nohup ./xray run -c config.json > xray.log 2>&1 &
+          
+          echo "等待 10 秒确保家宽节点连接成功..."
+          sleep 10
+          
+          echo "测试代理连通性 (允许最长等待 15 秒)..."
+          if ! curl -x socks5://127.0.0.1:10808 -s -m 15 https://api.ipify.org; then
+            echo "❌ 代理测试失败！打印 Xray 运行日志排查原因："
+            echo "----------------------------------------"
+            cat xray.log
+            echo "----------------------------------------"
+            exit 1  # 阻止工作流继续运行
+          else
+            echo -e "\n✅ 代理连接成功！"
+          fi
+          cd ..
 
       # ==========================================
       # 👇 运行面板唤醒脚本
