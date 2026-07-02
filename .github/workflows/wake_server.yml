@@ -2,7 +2,7 @@ name: Wake Up Renqi Server (Xray Proxy Mode)
 
 on:
   schedule:
-    - cron: '0 */3 * * *'
+    - cron: '0 17 */3 * *'
   workflow_dispatch:
 
 jobs:
